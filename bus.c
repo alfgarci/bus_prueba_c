@@ -17,6 +17,7 @@ void R6();
 
 int llega10 = 0, llega5 = 0, llega6 = 0;
 int colaparada, bajarse;
+int maleducadosfuera = 0;
 
 /**********************************************************************************/
 /************       MAIN ***************************************************/
@@ -84,19 +85,24 @@ int main() {
       while (libres > 0 && (msgrcv(colaparada, (struct tipo_parada *)&pasajero,
                                    sizeof(struct tipo_parada) - sizeof(long),
                                    parada, IPC_NOWAIT)) != -1) {
-        // Avisamos al cliente que se monte
         if (kill(pasajero.pid, 12) == -1)
           perror("No se puede enviar kill a cliente");
         else {
-          if (!llega5 && !llega6) // espero la respuesta del cliente
+          if (!llega5 && !llega6)
             pause();
-          if (llega6) { // el cliente me avisa de que se monta
+          if (llega6) {
             llega6 = 0;
-            libres--;
-            montados[pasajero.destino]++;
-            usleep(RETARDO); // para que de tiempo a pintarse
+            if (pasajero.maleducado && rand() % 2 == 0) {
+              maleducadosfuera++;
+              if (kill(pasajero.pid, 15) == -1)
+                perror("No se puede expulsar al cliente");
+            } else {
+              libres--;
+              montados[pasajero.destino]++;
+              usleep(RETARDO);
+            }
           } else
-            llega5 = 0; // el cliente se ha aburrido y no se monta
+            llega5 = 0;
         }
       }
       // Pintamos al bus entre la parada y la siguiente
@@ -146,7 +152,7 @@ void R10() { llega10 = 1; }
 void Rfin() {
   msgctl(colaparada, IPC_RMID, 0); // Borra la cola de mensajes
 
-  exit(0);
+  exit(maleducadosfuera);
 }
 
 /************************************************************************/

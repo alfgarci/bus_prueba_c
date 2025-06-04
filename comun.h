@@ -26,6 +26,7 @@ struct tipo_parada{
  long tipo; //obligatorio para la cola de mensajes
  int pid;
  int destino; //parada de destino
+ int maleducado; // 1 si es cliente maleducado
 };
 
 
