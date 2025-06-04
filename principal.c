@@ -73,8 +73,10 @@ int main() {
     perror("error al escribir parametros al bus");
 
   for (i = 1; i <= maxclientes; i++) {
-    // Creamos el proceso cliente, pasandole la lectura de la pipe
-    creaproceso("cliente", tubocliente[0]);
+    if (rand() % 100 < 30)
+      creaproceso("cliente_maleducado", tubocliente[0]);
+    else
+      creaproceso("cliente", tubocliente[0]);
     // Escribimos los parametros al cliente, por la pipe
     if (write(tubocliente[1], &paramclientes, sizeof(paramclientes)) == -1)
       perror("error al escribir parametros al cliente");
@@ -108,13 +110,14 @@ int main() {
     unlink(nombrefifo);
   }
 
-  //Esperar la finalizacion del servidor grafico y el bus	
-  wait(NULL);
+  int statusbus;
+  waitpid(pidbus, &statusbus, 0);
   wait(NULL);
 
 
   // Limpiamos la terminal de restos graficos
   system("reset");
+  printf("Clientes maleducados expulsados: %d\n", WEXITSTATUS(statusbus));
   return 0;
 }
 

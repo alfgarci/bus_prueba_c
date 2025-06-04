@@ -1,0 +1,6 @@
+Se crea un nuevo proceso llamado cliente_maleducado.
+El 30 por ciento de los clientes se generan usando este proceso.
+La estructura tipo_parada incluye un campo maleducado para que el bus
+pueda distinguirlos y decidir, con un 50% de probabilidad, expulsarlos
+al subir. El bus contabiliza estos expulsados y finaliza devolviendo
+el numero total al principal, que lo muestra tras resetear la pantalla.
