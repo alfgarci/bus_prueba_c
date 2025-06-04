@@ -11,6 +11,9 @@
 
 #include "comun.h"
 
+#define FIFO_BUS_PARAMS "fifo_bus_p"
+#define FIFO_CLIENTE_PARAMS "fifo_cliente_p"
+
 void leeparametros(struct ParametrosBus *parambus,
                    struct ParametrosCliente *paramclientes, int *maxclientes,
                    int *creamin, int *creamax);
@@ -28,9 +31,9 @@ int llega10 = 0;
 int main() {
 
   int pservidorgraf, i, pidbus;
-  int tubocliente[2], tubobus[2];
   char nombrefifo[10];
   int fifos[7];
+  int fd_fifo_bus_params, fd_fifo_cliente_params; // Descriptores para las FIFOs de parámetros
 
   struct ParametrosBus parambus;
   struct ParametrosCliente paramclientes;
@@ -62,24 +65,43 @@ int main() {
       perror("Errro al abrir la fifo");
   }
 
-  // Creamos las pipes para los parametos de bus y cliente
-  pipe(tubobus);
-  pipe(tubocliente);
+  // Crear FIFOs para parámetros
+  if (mkfifo(FIFO_BUS_PARAMS, 0600) == -1) {
+      perror("mkfifo FIFO_BUS_PARAMS");
+      exit(EXIT_FAILURE);
+  }
+  if (mkfifo(FIFO_CLIENTE_PARAMS, 0600) == -1) {
+      perror("mkfifo FIFO_CLIENTE_PARAMS");
+      exit(EXIT_FAILURE);
+  }
 
-  // Creamos el proceso bus, pasandole la lectura de la pipe
-  pidbus = creaproceso("bus", tubobus[0]);
-  // Escribimos los parametros al bus, por la pipe
-  if (write(tubobus[1], &parambus, sizeof(parambus)) == -1)
+  // Abrir FIFOs para parámetros
+  fd_fifo_bus_params = open(FIFO_BUS_PARAMS, O_WRONLY);
+  if (fd_fifo_bus_params == -1) {
+      perror("open FIFO_BUS_PARAMS");
+      exit(EXIT_FAILURE);
+  }
+
+  fd_fifo_cliente_params = open(FIFO_CLIENTE_PARAMS, O_WRONLY);
+  if (fd_fifo_cliente_params == -1) {
+      perror("open FIFO_CLIENTE_PARAMS");
+      exit(EXIT_FAILURE);
+  }
+
+  // Creamos el proceso bus, pasandole el nombre de la FIFO
+  pidbus = creaproceso("bus", FIFO_BUS_PARAMS);
+  // Escribimos los parametros al bus, por la FIFO
+  if (write(fd_fifo_bus_params, &parambus, sizeof(parambus)) == -1)
     perror("error al escribir parametros al bus");
 
   for (i = 1; i <= maxclientes; i++) {
-    // Creamos el proceso cliente, pasandole la lectura de la pipe
-    creaproceso("cliente", tubocliente[0]);
-    // Escribimos los parametros al cliente, por la pipe
-    if (write(tubocliente[1], &paramclientes, sizeof(paramclientes)) == -1)
+    // Creamos el proceso cliente, pasandole el nombre de la FIFO
+    creaproceso("cliente", FIFO_CLIENTE_PARAMS);
+    // Escribimos los parametros al cliente, por la FIFO
+    if (write(fd_fifo_cliente_params, &paramclientes, sizeof(paramclientes)) == -1)
       perror("error al escribir parametros al cliente");
     // pasamos también el pid del proceso bus
-    if (write(tubocliente[1], &pidbus, sizeof(pidbus)) == -1)
+    if (write(fd_fifo_cliente_params, &pidbus, sizeof(pidbus)) == -1)
       perror("error al escribir pid del bus al cliente");
     sleep(rand() % (creamax - creamin + 1) + creamin);
   }
@@ -107,6 +129,12 @@ int main() {
     close(fifos[i]);
     unlink(nombrefifo);
   }
+
+  // Cerrar y eliminar FIFOs de parámetros
+  close(fd_fifo_bus_params);
+  close(fd_fifo_cliente_params);
+  unlink(FIFO_BUS_PARAMS);
+  unlink(FIFO_CLIENTE_PARAMS);
 
   //Esperar la finalizacion del servidor grafico y el bus	
   wait(NULL);
@@ -208,15 +236,18 @@ void leeparametros(struct ParametrosBus *parambus,
 /***********     FUNCION: creaproceso      ******************************/
 /************************************************************************/
 
-int creaproceso(const char nombre[], int tubo) {
+int creaproceso(const char nombre[], const char *tubo_fifo_nombre) { // Modificado para aceptar nombre de FIFO
 
   int vpid;
+  int fd_fifo; // Descriptor para la FIFO específica del proceso hijo
 
   vpid = fork();
   if (vpid == 0) {
-    close(2);
-    dup(tubo);
-    execl(nombre, nombre, NULL);
+    // El hijo abre la FIFO correspondiente para lectura
+    // Nota: Se asume que el proceso hijo (bus o cliente) abrirá la FIFO para lectura.
+    // Esta función (padre) ya no duplica el descriptor de la pipe.
+    // La lógica de apertura de la FIFO por parte del hijo debe estar en el código de 'bus' y 'cliente'.
+    execl(nombre, nombre, tubo_fifo_nombre, NULL); // Pasar el nombre de la FIFO como argumento
     perror("error de execl");
     exit(-1);
   } else if (vpid == -1) {

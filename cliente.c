@@ -20,9 +20,10 @@ int llega12 = 0, llega14 = 0, llega10 = 0, pidbus;
 /************       MAIN ***************************************************/
 /**********************************************************************************/
 
-int main() {
+int main(int argc, char *argv[]) { // Añadido argc y argv
 
   int colagrafica, llega, sale, colaparada, tuberia;
+  int fd_params_fifo; // Descriptor para la FIFO de parámetros
   struct tipo_parada pasajero;
   char nombrefifo[10];
   int fifosalir, testigo = 1;
@@ -37,14 +38,57 @@ int main() {
   colagrafica = crea_cola(ftok("./fichcola.txt", 18));
   colaparada = crea_cola(ftok("./fichcola.txt", 20));
 
-  // movemos la pipe a otra posicion y recuperamos la salida de errores
+  // Verificar argumentos y abrir FIFO de parámetros
+  if (argc < 2) {
+    fprintf(stderr, "Uso: %s <nombre_fifo_parametros>\n", argv[0]);
+    exit(EXIT_FAILURE);
+  }
+
+  fd_params_fifo = open(argv[1], O_RDONLY);
+  if (fd_params_fifo == -1) {
+    perror("Error al abrir FIFO de parámetros en el cliente");
+    exit(EXIT_FAILURE);
+  }
+
+  // Redirigir stderr (descriptor 2) a la FIFO para leer los parámetros
+  if (dup2(fd_params_fifo, 2) == -1) {
+    perror("Error al redirigir stderr a la FIFO en el cliente");
+    close(fd_params_fifo);
+    exit(EXIT_FAILURE);
+  }
+  // Ya no necesitamos el descriptor original de la FIFO, pues ahora es accesible vía el descriptor 2
+  close(fd_params_fifo);
+
+  // Ahora el descriptor 2 (stderr) apunta a la FIFO.
+  // Guardamos este descriptor (que es el de la FIFO) en 'tuberia'.
   tuberia = dup(2);
+  if (tuberia == -1) {
+    perror("Error al duplicar el descriptor de la FIFO en el cliente");
+    exit(EXIT_FAILURE);
+  }
+
+  // Restauramos stderr para que apunte a la terminal para mensajes de error normales.
+  // Esto se hace DESPUÉS de que 'tuberia' haya capturado el descriptor de la FIFO.
   close(2);
-  open("/dev/tty", O_WRONLY);
-  // Leemos los parametros desde la pipe
-  read(tuberia, &params, sizeof(params));
-  // Leemos el pid del bus desde la pipe
-  read(tuberia, &pidbus, sizeof(pidbus));
+  if (open("/dev/tty", O_WRONLY) == -1) {
+    perror("Error al restaurar stderr a /dev/tty en el cliente");
+    // Aunque esto falle, intentamos continuar, pero los errores futuros no irán a la tty
+  }
+
+  // Leemos los parametros desde 'tuberia' (que es la FIFO)
+  if (read(tuberia, &params, sizeof(params)) != sizeof(params)) {
+    perror("Error al leer parámetros (params) desde la FIFO en el cliente");
+    close(tuberia);
+    exit(EXIT_FAILURE);
+  }
+  // Leemos el pid del bus desde 'tuberia' (que es la FIFO)
+  if (read(tuberia, &pidbus, sizeof(pidbus)) != sizeof(pidbus)) {
+    perror("Error al leer parámetros (pidbus) desde la FIFO en el cliente");
+    close(tuberia);
+    exit(EXIT_FAILURE);
+  }
+  // Cerramos el descriptor de la FIFO que estaba en 'tuberia' ya que hemos terminado de leer.
+  close(tuberia);
 
   // Generamos aleatoriamente la parada de llegada y la de salida
   srand(getpid());
