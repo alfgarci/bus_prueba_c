@@ -28,7 +28,7 @@ int llega10 = 0;
 int main() {
 
   int pservidorgraf, i, pidbus;
-  int tubocliente[2], tubobus[2];
+  int fifoparam, tubobus[2];
   char nombrefifo[10];
   int fifos[7];
 
@@ -62,24 +62,32 @@ int main() {
       perror("Errro al abrir la fifo");
   }
 
-  // Creamos las pipes para los parametos de bus y cliente
+  // Creamos la pipe para los parametros del bus
   pipe(tubobus);
-  pipe(tubocliente);
+  // Creamos la fifo para los parametros de los clientes
+  unlink("fifocliente");
+  if (mkfifo("fifocliente", 0600) == -1)
+    perror("Error al crear fifo parametros");
 
   // Creamos el proceso bus, pasandole la lectura de la pipe
   pidbus = creaproceso("bus", tubobus[0]);
+
+  // Abrimos la fifo de parametros una vez que el bus esta creado
+  fifoparam = open("fifocliente", O_RDWR);
+  if (fifoparam == -1)
+    perror("Error al abrir fifo parametros");
   // Escribimos los parametros al bus, por la pipe
   if (write(tubobus[1], &parambus, sizeof(parambus)) == -1)
     perror("error al escribir parametros al bus");
 
   for (i = 1; i <= maxclientes; i++) {
-    // Creamos el proceso cliente, pasandole la lectura de la pipe
-    creaproceso("cliente", tubocliente[0]);
-    // Escribimos los parametros al cliente, por la pipe
-    if (write(tubocliente[1], &paramclientes, sizeof(paramclientes)) == -1)
+    // Creamos el proceso cliente, pasandole la fifo de parametros
+    creaproceso("cliente", fifoparam);
+    // Escribimos los parametros al cliente por la fifo
+    if (write(fifoparam, &paramclientes, sizeof(paramclientes)) == -1)
       perror("error al escribir parametros al cliente");
     // pasamos también el pid del proceso bus
-    if (write(tubocliente[1], &pidbus, sizeof(pidbus)) == -1)
+    if (write(fifoparam, &pidbus, sizeof(pidbus)) == -1)
       perror("error al escribir pid del bus al cliente");
     sleep(rand() % (creamax - creamin + 1) + creamin);
   }
@@ -107,6 +115,8 @@ int main() {
     close(fifos[i]);
     unlink(nombrefifo);
   }
+  close(fifoparam);
+  unlink("fifocliente");
 
   //Esperar la finalizacion del servidor grafico y el bus	
   wait(NULL);
