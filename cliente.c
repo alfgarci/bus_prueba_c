@@ -22,7 +22,8 @@ int llega12 = 0, llega14 = 0, llega10 = 0, pidbus;
 
 int main() {
 
-  int colagrafica, llega, sale, colaparada, tuberia;
+  int colagrafica, llega, sale, colaparada;
+  int paramfifo;
   struct tipo_parada pasajero;
   char nombrefifo[10];
   int fifosalir, testigo = 1;
@@ -37,14 +38,13 @@ int main() {
   colagrafica = crea_cola(ftok("./fichcola.txt", 18));
   colaparada = crea_cola(ftok("./fichcola.txt", 20));
 
-  // movemos la pipe a otra posicion y recuperamos la salida de errores
-  tuberia = dup(2);
-  close(2);
-  open("/dev/tty", O_WRONLY);
-  // Leemos los parametros desde la pipe
-  read(tuberia, &params, sizeof(params));
-  // Leemos el pid del bus desde la pipe
-  read(tuberia, &pidbus, sizeof(pidbus));
+  // Abrimos la fifo de parametros de cliente
+  paramfifo = open("fifoclienteparam", O_RDONLY);
+  if (paramfifo == -1)
+    perror("Error al abrir fifo cliente param");
+  read(paramfifo, &params, sizeof(params));
+  read(paramfifo, &pidbus, sizeof(pidbus));
+  close(paramfifo);
 
   // Generamos aleatoriamente la parada de llegada y la de salida
   srand(getpid());

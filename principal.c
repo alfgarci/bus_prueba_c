@@ -14,7 +14,7 @@
 void leeparametros(struct ParametrosBus *parambus,
                    struct ParametrosCliente *paramclientes, int *maxclientes,
                    int *creamin, int *creamax);
-int creaproceso(const char *, int);
+int creaproceso(const char *);
 int creaservigraf(int);
 void R10();
 void R12();
@@ -28,9 +28,9 @@ int llega10 = 0;
 int main() {
 
   int pservidorgraf, i, pidbus;
-  int tubocliente[2], tubobus[2];
   char nombrefifo[10];
   int fifos[7];
+  int fifoparbus, fifoparcli;
 
   struct ParametrosBus parambus;
   struct ParametrosCliente paramclientes;
@@ -62,24 +62,31 @@ int main() {
       perror("Errro al abrir la fifo");
   }
 
-  // Creamos las pipes para los parametos de bus y cliente
-  pipe(tubobus);
-  pipe(tubocliente);
+  // Creamos las fifos para los parametros del bus y los clientes
+  unlink("fifobusparam");
+  unlink("fifoclienteparam");
+  if (mkfifo("fifobusparam", 0600) == -1)
+    perror("Error al crear fifo bus param");
+  if (mkfifo("fifoclienteparam", 0600) == -1)
+    perror("Error al crear fifo cliente param");
+  fifoparbus = open("fifobusparam", O_RDWR);
+  if (fifoparbus == -1)
+    perror("Error al abrir fifo bus param");
+  fifoparcli = open("fifoclienteparam", O_RDWR);
+  if (fifoparcli == -1)
+    perror("Error al abrir fifo cliente param");
 
-  // Creamos el proceso bus, pasandole la lectura de la pipe
-  pidbus = creaproceso("bus", tubobus[0]);
-  // Escribimos los parametros al bus, por la pipe
-  if (write(tubobus[1], &parambus, sizeof(parambus)) == -1)
+  // Creamos el proceso bus y le pasamos los parametros por la fifo
+  pidbus = creaproceso("bus");
+  if (write(fifoparbus, &parambus, sizeof(parambus)) == -1)
     perror("error al escribir parametros al bus");
 
   for (i = 1; i <= maxclientes; i++) {
-    // Creamos el proceso cliente, pasandole la lectura de la pipe
-    creaproceso("cliente", tubocliente[0]);
-    // Escribimos los parametros al cliente, por la pipe
-    if (write(tubocliente[1], &paramclientes, sizeof(paramclientes)) == -1)
+    // Creamos el proceso cliente y le escribimos los parametros en la fifo
+    creaproceso("cliente");
+    if (write(fifoparcli, &paramclientes, sizeof(paramclientes)) == -1)
       perror("error al escribir parametros al cliente");
-    // pasamos también el pid del proceso bus
-    if (write(tubocliente[1], &pidbus, sizeof(pidbus)) == -1)
+    if (write(fifoparcli, &pidbus, sizeof(pidbus)) == -1)
       perror("error al escribir pid del bus al cliente");
     sleep(rand() % (creamax - creamin + 1) + creamin);
   }
@@ -107,6 +114,10 @@ int main() {
     close(fifos[i]);
     unlink(nombrefifo);
   }
+  close(fifoparbus);
+  close(fifoparcli);
+  unlink("fifobusparam");
+  unlink("fifoclienteparam");
 
   //Esperar la finalizacion del servidor grafico y el bus	
   wait(NULL);
@@ -208,14 +219,12 @@ void leeparametros(struct ParametrosBus *parambus,
 /***********     FUNCION: creaproceso      ******************************/
 /************************************************************************/
 
-int creaproceso(const char nombre[], int tubo) {
+int creaproceso(const char nombre[]) {
 
   int vpid;
 
   vpid = fork();
   if (vpid == 0) {
-    close(2);
-    dup(tubo);
     execl(nombre, nombre, NULL);
     perror("error de execl");
     exit(-1);

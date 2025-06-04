@@ -24,7 +24,8 @@ int colaparada, bajarse;
 
 int main() {
 
-  int colagrafica, parada, tuberia;
+  int colagrafica, parada;
+  int paramfifo;
   struct tipo_parada pasajero;
   int libres;
   int montados[7], gente, i, testigo = 1;
@@ -43,12 +44,12 @@ int main() {
   colagrafica = crea_cola(ftok("./fichcola.txt", 18));
   colaparada = crea_cola(ftok("./fichcola.txt", 20));
 
-  // movemos la pipe a otra posicion y recuperamos la salida de errores
-  tuberia = dup(2);
-  close(2);
-  open("/dev/tty", O_WRONLY);
-  // leemos los parametros desde la pipe
-  read(tuberia, &params, sizeof(params));
+  // Abrimos la fifo de parametros del bus
+  paramfifo = open("fifobusparam", O_RDONLY);
+  if (paramfifo == -1)
+    perror("Error al abrir fifo bus param");
+  read(paramfifo, &params, sizeof(params));
+  close(paramfifo);
   libres = params.capacidadbus;
 
   for (i = 1; i <= params.numparadas; i++) {
